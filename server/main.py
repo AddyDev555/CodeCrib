@@ -40,11 +40,11 @@ class CodeSheets(db.Model):
     codeDesc = db.Column(db.String(200), nullable=False)
     codeSnippet = db.Column(db.String(1000), nullable=False)
     sheet_id = db.Column(db.Integer, db.ForeignKey('CheatSheets.id'), nullable=False)
-
+    codeTitle = db.Column(db.String(20), nullable=False)
+    fav = db.Column(db.Boolean, default=False)
 
     def __repr__(self):
         return f'<sheetID {self.id}>'
-    
 
 @app.route('/userSignup', methods=['GET', 'POST'])
 def signup():
@@ -78,7 +78,7 @@ def login():
         return jsonify("Welcome to CodeCrib")
 
 
-@app.route('/createSheet', methods=['POST'])
+@app.route('/createSheet', methods=['GET','POST'])
 def createSheet():
     data = request.get_json()
     try:
@@ -91,7 +91,7 @@ def createSheet():
         if existing_sheet:
             mess = data['sheetName']
             return jsonify(f"Sheet title '{mess}' already exists!")
-        
+
         new_sheet = CheatSheets(
             sheetTitle=data['sheetName'],
             user_id=uid,
@@ -105,7 +105,7 @@ def createSheet():
         db.session.rollback()
         return jsonify(error=str(e)), 500
 
-@app.route("/showSheets", methods=["POST"])
+@app.route("/showSheets", methods=['GET',"POST"])
 def showSheets():
     if request.content_type != 'application/json':
         return jsonify("Welcome to CodeCrib Server")
@@ -131,7 +131,7 @@ def showSheets():
             return jsonify(f'{e}'), 500
 
 
-@app.route('/deleteSheet', methods=['POST'])
+@app.route('/deleteSheet', methods=['GET','POST'])
 def deleteSheet():
     if request.content_type != 'application/json':
         return jsonify("Welcome to CodeCrib Server")
@@ -154,7 +154,7 @@ def deleteSheet():
             return jsonify(f'{e}'), 500
     
 
-@app.route('/addCode', methods=['POST'])
+@app.route('/addCode', methods=['GET','POST'])
 def addCode():
     if request.content_type != 'application/json':
         return jsonify("Welcome to CodeCrib Server")
@@ -164,13 +164,13 @@ def addCode():
             data = request.get_json()
             code = data['code']
             codeDesc = data['codeDesc']
-            codeTitle = data['codeTitle']
+            codeT= data['codeTitle']
             
-            if not code or not codeTitle:
+            if not code or not codeT:
                 return jsonify("Please enter the Code")
 
-            sheet = CheatSheets.query.filter_by(sheetTitle=codeTitle).first()
-            new_code = CodeSheets(codeSnippet=code, codeDesc=codeDesc, sheet_id=sheet.id)
+            sheet = CheatSheets.query.filter_by(sheetTitle=codeT).first()
+            new_code = CodeSheets(codeSnippet=code, codeDesc=codeDesc, sheet_id=sheet.id, codeTitle=codeT)
             db.session.add(new_code)
             db.session.commit()
             
@@ -180,7 +180,7 @@ def addCode():
             return jsonify(f'{e}'), 500
     
 
-@app.route('/showCode', methods=['POST'])
+@app.route('/showCode', methods=['GET','POST'])
 def showCode():
     if request.content_type != 'application/json':
         return jsonify("Welcome to CodeCrib Server")
@@ -205,7 +205,7 @@ def showCode():
         except Exception as e:
             return jsonify(f'{e}'), 500
     
-@app.route("/delCode", methods=["POST"])
+@app.route("/delCode", methods=['GET',"POST"])
 def delCode():
     if request.content_type != 'application/json':
         return jsonify("Welcome to CodeCrib Server")
@@ -222,7 +222,7 @@ def delCode():
         except Exception as e:
             return jsonify(f'{e}'), 500
     
-@app.route("/editCode", methods=["POST"])
+@app.route("/editCode", methods=['GET',"POST"])
 def editCode():
     if request.content_type != 'application/json':
         return jsonify("Welcome to CodeCrib Server")
@@ -238,6 +238,87 @@ def editCode():
         except Exception as e:
             return jsonify(f'{e}'), 500
 
+@app.route('/allData', methods=['GET','POST'])
+def allData():
+    if request.content_type != 'application/json':
+        return jsonify("Welcome to CodeCrib Server")
+    
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            # print(f"allData: {data}")
+            
+            if not data:
+                jsonify("Data not Found!!")
+            
+            user = User.query.filter_by(username=data).first()
+            sheets = CheatSheets.query.filter_by(user_id=user.id).all()
+            codes = []
+            for sheet in sheets:
+                sheet_codes = CodeSheets.query.filter_by(sheet_id=sheet.id).all()
+                codes.extend(sheet_codes)
+
+            code_data = [{"id": code.id, "codeDesc": code.codeDesc, "code": code.codeSnippet, 'codeTitle': code.codeTitle} for code in codes]
+            return jsonify({"code_data": code_data}), 201
+            
+        except Exception as e:
+            return jsonify(f'{e}'), 500
+    
+@app.route('/favCode', methods=['GET','POST'])
+def favCode():
+    if request.content_type != 'application/json':
+        return jsonify("Welcome to CodeCrib Server")
+    
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            
+            if not data:
+                jsonify("Data not Found!!")
+            
+            user = User.query.filter_by(username=data).first()
+            sheets = CheatSheets.query.filter_by(user_id=user.id).all()
+            codes = []
+            for sheet in sheets:
+                sheet_codes = CodeSheets.query.filter_by(sheet_id=sheet.id, fav=True).all()
+                codes.extend(sheet_codes)
+
+            code_data = [{"id": code.id, "codeDesc": code.codeDesc, "code": code.codeSnippet, 'codeTitle': code.codeTitle} for code in codes]
+            return jsonify({"code_data": code_data}), 201
+
+        except Exception as e:
+            return jsonify(f'{e}'), 500
+    
+    
+@app.route('/savefavCode', methods=['GET','POST'])
+def savefavCode():
+    if request.content_type != 'application/json':
+        return jsonify("Welcome to CodeCrib Server")
+    
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            code = CodeSheets.query.get(data['codeId'])
+            code.fav = True
+            db.session.commit()
+            return jsonify({'mess':"Added to Favorites Successfully", 'codeId':code.id})
+        except Exception as e:
+            return jsonify(f'{e}'), 500
+
+@app.route('/removefavCode', methods=['GET','POST'])
+def removefavCode():
+    if request.content_type != 'application/json':
+        return jsonify("Welcome to CodeCrib Server")
+    
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            code = CodeSheets.query.get(data)
+            code.fav = False
+            db.session.commit()
+            return jsonify({'mess':"Removed from Favorites Successfully"})
+        except Exception as e:
+            return jsonify(f'{e}'), 500
 
 if '__main__' == __name__:
     with app.app_context():
